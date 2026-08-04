@@ -82,7 +82,7 @@ Confirmed on this machine, 2026-08-04:
 | Python | 3.14.3 | |
 | Package manager | uv 0.11.21 | |
 | Docker | 29.6.1 | |
-| gcloud | 559.0.0 | project `steadfast-helix-429321-b2` (ACTIVE), region `us-central1` |
+| gcloud | 559.0.0 | project set, region `us-central1` |
 | Local GPU | none (Apple Silicon, Metal) | Ollama uses Metal; fine for 8B Q4 |
 
 `tools` + `thinking` in the capability list is the enabling fact for this project — Gemma 4 can drive a real function-calling loop, and the thinking trace is excellent presentation material.
