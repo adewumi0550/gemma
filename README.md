@@ -158,21 +158,55 @@ moving to the cloud is **one environment variable**:
 | Laptop | `http://localhost:11434/v1` |
 | Cloud Run | `https://your-ollama-service.run.app/v1` |
 
-If you already have Ollama running on Cloud Run, point at it:
+**If you already have Ollama on Cloud Run**, deploy just the agent and point at it:
 
 ```bash
-gcloud run deploy gemma-agent --source . --region us-central1 --allow-unauthenticated --set-env-vars LLM_BASE_URL=https://YOUR-OLLAMA-SERVICE.run.app/v1,MODEL=gemma4
+LLM_BASE_URL=https://YOUR-OLLAMA.run.app/v1 ./deploy.sh YOUR_PROJECT_ID agent
 ```
 
-That's it — no Dockerfile. Cloud Run builds from source with buildpacks.
+**If you don't**, `deploy.sh` will build one for you — Ollama with Gemma 4 baked
+into the image, on an L4 GPU:
 
-If you *don't* have an Ollama service yet, you need one with a GPU. Gemma 4 at
-Q4 is ~9.6 GB, so an L4 (24 GB) is the right size. Two notes that save pain:
+```bash
+./deploy.sh YOUR_PROJECT_ID all
+```
 
-- **Bake the model into the image.** If the container pulls 9.6 GB at startup,
-  every cold start is 3–5 minutes.
-- **Set `--min-instances 1` before you present**, and back to `0` after. GPU
-  cold starts are not something you want an audience watching.
+```bash
+./deploy.sh YOUR_PROJECT_ID test
+```
+
+### Cost
+
+The agent service is tiny and effectively free. The GPU is not.
+
+| | |
+|---|---|
+| L4 GPU while running | ~$0.70–1.00 / hour |
+| Build (11 GB image, one-time) | ~$0.30 |
+| Image storage | ~$1 / month |
+| 1-hour workshop, warmed | ~$1 |
+| **Left warm and forgotten for a week** | **~$150** |
+
+Both services scale to zero by default, so you only pay while a request is
+running — at the cost of a ~60s cold start.
+
+Before you present:
+
+```bash
+./deploy.sh YOUR_PROJECT_ID warm
+```
+
+**After you present** — this is the one that matters:
+
+```bash
+./deploy.sh YOUR_PROJECT_ID down
+```
+
+Or remove the services entirely:
+
+```bash
+./deploy.sh YOUR_PROJECT_ID destroy
+```
 
 ---
 
