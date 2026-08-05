@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 
 from tokenic_mcp import keys as keylib
 from tokenic_mcp.models import ApiKey, UsageEvent
 from tokenic_mcp.storage import get_storage
+
+# Tokens every new key gets unless told otherwise. 2000K = 2,000,000.
+# Set TOKENIC_DEFAULT_QUOTA=0 to issue unlimited keys instead.
+DEFAULT_TOKEN_QUOTA = int(os.getenv("TOKENIC_DEFAULT_QUOTA", "2000000"))
 
 
 class AuthError(Exception):
@@ -23,7 +28,16 @@ class QuotaError(Exception):
 
 def create_key(owner: str, email: str | None = None, label: str | None = None,
                token_quota: int | None = None, environment: str = "live") -> dict:
-    """Mint a key. The raw secret is in the return value and nowhere else."""
+    """Mint a key. The raw secret is in the return value and nowhere else.
+
+    Omitting token_quota applies DEFAULT_TOKEN_QUOTA (2,000,000 tokens).
+    Pass 0 explicitly for an unlimited key.
+    """
+    if token_quota is None:
+        token_quota = DEFAULT_TOKEN_QUOTA or None
+    elif token_quota == 0:
+        token_quota = None  # explicit unlimited
+
     key_id, raw, key_hash, prefix = keylib.generate(environment)
     record = ApiKey(
         id=key_id, key_hash=key_hash, prefix=prefix,

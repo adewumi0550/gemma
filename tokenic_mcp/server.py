@@ -47,25 +47,27 @@ if TOOLSET in ("all", "keys"):
 
     @mcp.tool()
     def issue_api_key(owner: str, email: str = "", label: str = "",
-                      token_quota: int = 0, environment: str = "live") -> dict:
+                      token_quota: int = -1, environment: str = "live") -> dict:
         """Issue a new API key for a user.
 
         The raw key is returned ONCE and never stored — only its SHA-256 hash
-        is kept, so it cannot be recovered later. Pass token_quota=0 for
-        unlimited, or a token count to cap usage.
+        is kept, so it cannot be recovered later.
 
         Args:
             owner: who the key belongs to, e.g. a username or org id
             email: optional contact address
             label: optional note, e.g. "workshop demo"
-            token_quota: maximum total tokens; 0 means unlimited
+            token_quota: max total tokens. Omit for the default 2,000,000;
+                pass 0 for an unlimited key.
             environment: "live" or "test"
         """
         return metering.create_key(
             owner=owner,
             email=email or None,
             label=label or None,
-            token_quota=token_quota or None,
+            # -1 is the sentinel for "not supplied" — 0 means unlimited, and
+            # None would be ambiguous in a JSON tool schema.
+            token_quota=None if token_quota < 0 else token_quota,
             environment=environment,
         )
 
