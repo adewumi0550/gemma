@@ -21,8 +21,22 @@ import os
 import time
 
 import httpx
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from pydantic import BaseModel
+
+# Optional per-user API keys and token metering. If tokenic_mcp isn't
+# installed, the agent runs exactly as before — open, in-memory metrics only.
+try:
+    from tokenic_mcp.middleware import meter, require_key
+    TOKENIC = True
+except ImportError:  # pragma: no cover
+    TOKENIC = False
+
+    def require_key():
+        return None
+
+    def meter(*_args, **_kwargs):
+        return None
 
 # --- config: one env var moves this between laptop and cloud -----------------
 
@@ -220,8 +234,14 @@ class Ask(BaseModel):
 
 
 @app.post("/chat")
-def chat(ask: Ask):
-    return run_agent(ask.message)
+def chat(ask: Ask, key=Depends(require_key)):
+    result = run_agent(ask.message)
+    # Attribute the tokens to whoever's key made the call. No-op if unauthenticated.
+    meter(key, result, model=MODEL, endpoint="/chat")
+    if key is not None:
+        result["billed_to"] = {"key_id": key.id, "owner": key.owner,
+                               "tokens_remaining": key.tokens_remaining}
+    return result
 
 
 @app.get("/metrics")

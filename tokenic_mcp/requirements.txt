@@ -1,0 +1,12 @@
+# Core — needed for the MCP server itself
+mcp>=1.2.0
+
+# Backend: Firebase / Firestore
+# google-cloud-firestore>=2.19.0
+
+# Backend: Postgres / Cloud SQL
+# psycopg[binary]>=3.2.0
+# psycopg-pool>=3.2.0
+
+# Cloud SQL with IAM auth instead of a password in DATABASE_URL
+# cloud-sql-python-connector[pg8000]>=1.12.0
