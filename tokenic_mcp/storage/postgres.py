@@ -31,9 +31,11 @@ class PostgresStorage:
         from psycopg_pool import ConnectionPool
 
         self._psycopg = psycopg
-        dsn = dsn or os.getenv("DATABASE_URL")
+        # MCP_DB is accepted as an alias so the connection string can be named
+        # after this service rather than colliding with an app's DATABASE_URL.
+        dsn = dsn or os.getenv("DATABASE_URL") or os.getenv("MCP_DB")
         if not dsn:
-            raise RuntimeError("DATABASE_URL is not set")
+            raise RuntimeError("set DATABASE_URL or MCP_DB to a postgres connection string")
 
         # A pool matters on Cloud Run: each instance handles concurrent
         # requests, and opening a Postgres connection per request is slow.

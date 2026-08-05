@@ -264,17 +264,62 @@ Calls then need a key, and responses gain a `billed_to` block:
 | `firestore` | You want serverless — matches Cloud Run, no pool to manage |
 | `postgres` | You'll bill from this data — SQL aggregation, monthly rollup view |
 
-Copy the example config and fill in whichever backend you chose:
+Every new key gets **2,000,000 tokens** by default. Change it with
+`TOKENIC_DEFAULT_QUOTA`, or per key with `issue_api_key(token_quota=…)` — `0`
+issues an unlimited key. Once exhausted, calls get **429**.
+
+### Adding a Postgres URL
+
+Three ways to supply it, in order of precedence:
+
+**1. Environment variable** — highest precedence, good for a one-off test:
+
+```bash
+export DATABASE_URL='postgresql://user:password@host:5432/dbname'
+```
+
+**2. A `.env` file** — what most people want locally:
 
 ```bash
 cp tokenic_mcp/.env.example tokenic_mcp/.env
 ```
 
+Edit it, set `TOKENIC_BACKEND=postgres` and your `DATABASE_URL`. The file is
+gitignored — **never commit a real one**.
+
+**3. On Cloud Run** — use the unix socket, not a public IP:
+
 ```bash
-set -a && source tokenic_mcp/.env && set +a && python app.py
+gcloud run deploy tokenic --source . --region us-central1 --add-cloudsql-instances PROJECT:REGION:INSTANCE --set-env-vars TOKENIC_BACKEND=postgres,DATABASE_URL='postgresql://user:pass@/dbname?host=/cloudsql/PROJECT:REGION:INSTANCE'
 ```
 
-`.env` is gitignored; `.env.example` is the documented template.
+### Then test it
+
+```bash
+python -m tokenic_mcp.check
+```
+
+That connects, creates the schema, issues a key, meters usage, verifies quota
+enforcement, and cleans up after itself. It prints your URL with the password
+masked, so the output is safe to paste when asking for help.
+
+Run it **before** a workshop. Finding out your database is unreachable while
+thirty people watch is a bad way to learn.
+
+> **If your password contains `@ : / ? # $`, URL-encode it** — this is the most
+> common connection failure. `$` becomes `%24`, `@` becomes `%40`:
+>
+> ```bash
+> python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" 'your-password'
+> ```
+
+Common failures the check will name for you:
+
+| Symptom | Cause |
+|---|---|
+| `ConnectionTimeout` | Cloud SQL **Authorized networks** doesn't include your IP, or a firewall blocks 5432 |
+| `authentication failed` | Wrong password, or special characters not URL-encoded |
+| `driver missing` | `pip install "psycopg[binary]" psycopg-pool` |
 
 Keys are stored as **SHA-256 only** and shown exactly once. A database dump leaks nothing usable. Full detail in [`tokenic_mcp/README.md`](tokenic_mcp/README.md).
 
