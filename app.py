@@ -19,6 +19,7 @@ Deploy:
 import json
 import os
 import time
+from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import Depends, FastAPI
@@ -231,7 +232,35 @@ def run_agent(question: str) -> dict:
 
 # --- 4. HTTP ----------------------------------------------------------------
 
-app = FastAPI(title="Gemma 4 Agent")
+# --- 4. HTTP + MCP ----------------------------------------------------------
+# One Cloud Run service exposes two things:
+#   /chat, /metrics  the metered Gemma endpoint
+#   /mcp             the tokenic MCP server — key issuing and usage metering
+#
+# Mounting MCP here rather than running it separately means keys, quotas and
+# the traffic they meter live behind one URL and one deployment.
+
+MCP_MOUNTED = False
+try:
+    from tokenic_mcp.server import mcp as tokenic_mcp_server
+
+    # FastMCP's app serves at /mcp internally; mounting it at /mcp would give
+    # /mcp/mcp. Serve it at the mount root so the public path is just /mcp.
+    tokenic_mcp_server.settings.streamable_http_path = "/"
+
+    # Streamable HTTP needs its session manager running for the app's lifetime.
+    @asynccontextmanager
+    async def _lifespan(_app: "FastAPI"):
+        async with tokenic_mcp_server.session_manager.run():
+            yield
+
+    app = FastAPI(title="Tokenic — metered Gemma 4", lifespan=_lifespan)
+    app.mount("/mcp", tokenic_mcp_server.streamable_http_app())
+    MCP_MOUNTED = True
+except Exception as _mcp_err:  # pragma: no cover - MCP is optional
+    # The agent must still serve if the mcp package is missing or fails to load.
+    print(f"MCP not mounted ({_mcp_err}); serving agent endpoints only")
+    app = FastAPI(title="Tokenic — metered Gemma 4")
 
 
 class Ask(BaseModel):
