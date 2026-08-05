@@ -138,7 +138,13 @@ pip install -r requirements.txt
 python app.py
 ```
 
-**5. Ask something that needs tools:**
+Open **http://localhost:8080** — a status page that says **“Gemma 4 is running”**, with a live model check, the tool list, and a box to ask questions.
+
+> Hitting Ollama directly (`:11434`) says *“Ollama is running”* — that's Ollama's
+> own root handler and can't be changed. The agent's page is the one to put on
+> screen; rename it with `MODEL_LABEL="Gemma 4"` if you switch models.
+
+**5. Or ask from the terminal:**
 
 ```bash
 curl -X POST localhost:8080/chat -H 'Content-Type: application/json' -d '{"message":"What is the temperature in Lagos right now, and what is that in Fahrenheit?"}'

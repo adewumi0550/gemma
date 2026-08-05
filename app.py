@@ -22,6 +22,7 @@ import time
 
 import httpx
 from fastapi import Depends, FastAPI
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 # Optional per-user API keys and token metering. If tokenic_mcp isn't
@@ -42,6 +43,10 @@ except ImportError:  # pragma: no cover
 
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
 MODEL = os.getenv("MODEL", "gemma4")
+
+# What the status page shows. The tag ("gemma4") is what Ollama needs; this is
+# what a human should read.
+MODEL_LABEL = os.getenv("MODEL_LABEL", "Gemma 4")
 MAX_STEPS = int(os.getenv("MAX_STEPS", "6"))
 PORT = int(os.getenv("PORT", "8080"))
 
@@ -267,13 +272,86 @@ def healthz():
     return {"status": "ok" if ok else "degraded", "model": MODEL, "llm": LLM_BASE_URL}
 
 
-@app.get("/")
+def _model_up() -> bool:
+    try:
+        return httpx.get(f"{LLM_BASE_URL}/models", timeout=5).status_code < 400
+    except Exception:
+        return False
+
+
+@app.get("/", response_class=HTMLResponse)
 def home():
+    """Status page. Ollama's own root says 'Ollama is running' — this says
+    what the audience actually cares about."""
+    up = _model_up()
+    dot = "#1D9E75" if up else "#D85A30"
+    state = f"{MODEL_LABEL} is running" if up else f"{MODEL_LABEL} is unreachable"
+    tools = "".join(f"<code>{t}</code>" for t in TOOLS)
+    return f"""<!doctype html>
+<meta charset="utf-8"><title>{MODEL_LABEL} is running</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+ body{{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;max-width:40rem;
+      margin:4rem auto;padding:0 1.5rem;line-height:1.6;color:#1c1c1a}}
+ h1{{font-size:1.9rem;margin:0 0 .3rem;display:flex;align-items:center;gap:.6rem}}
+ .dot{{width:.7rem;height:.7rem;border-radius:50%;background:{dot};flex:none}}
+ .sub{{color:#5f5e5a;margin:0 0 2rem}}
+ code{{background:#f1efe8;padding:.15rem .45rem;border-radius:4px;font-size:.87em;
+       margin-right:.3rem;display:inline-block}}
+ input{{width:100%;padding:.75rem;font-size:1rem;border:1px solid #d3d1c7;
+        border-radius:8px;box-sizing:border-box}}
+ pre{{background:#f1efe8;padding:1rem;border-radius:8px;overflow-x:auto;font-size:.85rem}}
+ .lbl{{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;
+       color:#888780;margin:1.6rem 0 .4rem}}
+ .ans{{font-size:1.05rem;margin:.8rem 0}}
+</style>
+<h1><span class="dot"></span>{state}</h1>
+<p class="sub">Agentic AI · {MODEL} served by Ollama · {"Cloud Run" if "localhost" not in LLM_BASE_URL else "local"}</p>
+
+<div class="lbl">Tools</div>
+<div>{tools}</div>
+
+<div class="lbl">Ask it something</div>
+<input id="q" placeholder="What's the temperature in Lagos, and what is that in Fahrenheit?"
+       autofocus onkeydown="if(event.key==='Enter')ask()">
+<div id="out"></div>
+
+<div class="lbl">Endpoints</div>
+<div><code>POST /chat</code><code>GET /metrics</code><code>GET /healthz</code></div>
+
+<script>
+async function ask() {{
+  const q = document.getElementById('q').value.trim();
+  const out = document.getElementById('out');
+  if (!q) return;
+  out.innerHTML = '<p class="ans">thinking…</p>';
+  try {{
+    const r = await fetch('/chat', {{method:'POST',
+      headers:{{'Content-Type':'application/json'}}, body: JSON.stringify({{message:q}})}});
+    const d = await r.json();
+    const trace = (d.trace||[]).map(t =>
+      t.tool + '(' + JSON.stringify(t.args) + ')\\n  -> ' + JSON.stringify(t.result)
+    ).join('\\n\\n');
+    out.innerHTML = '<p class="ans"></p><div class="lbl">'
+      + (d.usage ? d.usage.total + ' tokens · ' + (d.usage.llm_calls||0) + ' model calls · '
+                 + (d.usage.tool_calls||0) + ' tool calls' : '')
+      + '</div>' + (trace ? '<pre></pre>' : '');
+    out.querySelector('.ans').textContent = d.answer || '(no answer)';
+    if (trace) out.querySelector('pre').textContent = trace;
+  }} catch (e) {{ out.innerHTML = '<p class="ans">request failed: ' + e + '</p>'; }}
+}}
+</script>
+"""
+
+
+@app.get("/status")
+def status():
+    """Same thing as JSON, for scripts."""
     return {
+        "status": f"{MODEL_LABEL} is running" if _model_up() else f"{MODEL_LABEL} is unreachable",
         "model": MODEL,
+        "served_by": LLM_BASE_URL,
         "tools": list(TOOLS),
-        "try": "curl -X POST .../chat -H 'Content-Type: application/json' "
-               "-d '{\"message\":\"Temperature in Lagos, in Fahrenheit?\"}'",
     }
 
 
