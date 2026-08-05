@@ -22,15 +22,10 @@ the agenda, and it's the closest match to the event's business-validation theme.
 
 ## Title
 
-**From Open Model to Paid Product: Metering Gemma with MCP**
+**Metering Your Own AI: Gemma, MCP, and Token Quotas for Agentic Apps**
 
-### Alternatives
-
-| Title | Angle |
-|---|---|
-| **Who's Using Your Tokens? Metering Gemma with MCP** | Question hook, MCP-forward |
-| **Your AI Has No Meter: API Keys and Quotas for Gemma** | Problem-first |
-| **Ship Gemma as a Product: Keys, Quotas, and Agentic Billing** | Founder-facing |
+Names all three searchable terms — Gemma, MCP, token quotas — without repeating
+"Cloud Run" from the 11:30 session.
 
 ---
 
@@ -48,10 +43,10 @@ The whole layer is built on **MCP**, so administration is itself agentic: ask an
 agent to issue a key with a two-million-token quota, or to show you who's
 overspending, and it does.
 
-We'll also confront the number that surprises everyone: agents consume roughly
-**20× more input tokens than output**, because every reasoning step resends the
-entire conversation. If you're pricing an AI product, that ratio is your
-business model.
+We'll also confront the number that surprises everyone: agentic apps consume
+roughly **20× more input tokens than output**, because every reasoning step
+resends the entire conversation. If you're pricing an AI product, that ratio is
+your business model.
 
 Open model. Open protocol. Your margins.
 
