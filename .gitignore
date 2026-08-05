@@ -7,3 +7,8 @@ env/
 .DS_Store
 .idea/
 .vscode/
+
+# env files (keep .env.example, ignore the real ones)
+.env
+*/.env
+!*.env.example

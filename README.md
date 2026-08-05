@@ -264,6 +264,18 @@ Calls then need a key, and responses gain a `billed_to` block:
 | `firestore` | You want serverless — matches Cloud Run, no pool to manage |
 | `postgres` | You'll bill from this data — SQL aggregation, monthly rollup view |
 
+Copy the example config and fill in whichever backend you chose:
+
+```bash
+cp tokenic_mcp/.env.example tokenic_mcp/.env
+```
+
+```bash
+set -a && source tokenic_mcp/.env && set +a && python app.py
+```
+
+`.env` is gitignored; `.env.example` is the documented template.
+
 Keys are stored as **SHA-256 only** and shown exactly once. A database dump leaks nothing usable. Full detail in [`tokenic_mcp/README.md`](tokenic_mcp/README.md).
 
 ---
@@ -311,6 +323,50 @@ Then substitute your ID wherever this README says `YOUR_PROJECT_ID`:
 ```bash
 ./deploy.sh my-gemma-agent-4f2a1 all
 ```
+
+### Second: your region
+
+**Pick a region near you** — it's the difference between 40 ms and 300 ms of network latency on every call, and it may matter for where your data sits.
+
+But **not every Cloud Run region has L4 GPUs.** See the current list:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/adewumi0550/gemma/main/quickstart.sh | bash -s -- regions
+```
+
+| Region | Location |
+|---|---|
+| `us-central1` *(default)* | Iowa |
+| `us-east4` | N. Virginia |
+| `us-west1` | Oregon |
+| `europe-west1` | Belgium |
+| `europe-west4` | Netherlands |
+| `europe-north1` | Finland |
+| `asia-southeast1` | Singapore |
+| `asia-south1` | Mumbai |
+| `asia-northeast1` | Tokyo |
+| `australia-southeast1` | Sydney |
+
+Pass it as the **third argument**:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/adewumi0550/gemma/main/quickstart.sh | bash -s -- deploy YOUR_PROJECT_ID europe-west4
+```
+
+Or set `REGION` — `deploy.sh` reads it from the environment:
+
+```bash
+REGION=asia-south1 ./deploy.sh YOUR_PROJECT_ID all
+```
+
+Omit both and you get an interactive picker. Precedence is **argument → `REGION` → prompt → `us-central1`**.
+
+> **Africa, South America, and the Middle East have no L4 Cloud Run region yet.**
+> From Lagos, `europe-west1` (Belgium) is usually the lowest-latency option;
+> from São Paulo, `us-east4`. The script warns if you pick a region not on the
+> list rather than blocking you — Google adds regions, and this table will age.
+
+Region availability shifts, so confirm against the [official GPU region list](https://cloud.google.com/run/docs/configuring/services/gpu) before a workshop.
 
 > The script takes the project ID as its **first argument** — it doesn't read
 > your gcloud default. That's deliberate: with a room full of people deploying

@@ -29,11 +29,43 @@ MODEL_SVC="gemma-model"
 AGENT_SVC="gemma-agent"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Echoed back in error messages so the fix is copy-pasteable.
+ORIGINAL_INVOCATION="./deploy.sh ${PROJECT} ${CMD}"
+
 bold()  { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 warn()  { printf '\033[33m!!  %s\033[0m\n' "$*"; }
 money() { printf '\033[31m$$  %s\033[0m\n' "$*"; }
 
 usage() { sed -n '3,20p' "${BASH_SOURCE[0]}"; exit 1; }
+
+# Ask a yes/no question, reading from the terminal rather than stdin.
+#
+# This matters when the script is reached through `curl … | bash`: stdin is
+# then the piped script text, so a plain `read` hits EOF immediately and — under
+# `set -e` — kills the run with no message at all. Reading /dev/tty asks the
+# human instead. Set ASSUME_YES=1 to skip prompts entirely (CI, automation).
+confirm() {
+  local prompt="$1" reply=""
+
+  if [[ "${ASSUME_YES:-}" == "1" ]]; then
+    printf '%s(ASSUME_YES)\n' "${prompt}"
+    return 0
+  fi
+
+  # `-r /dev/tty` can pass on a node where opening it still fails, so test by
+  # actually opening it rather than by stat-ing the path.
+  if ! { exec 3< /dev/tty; } 2>/dev/null; then
+    printf '\n\033[31mNo terminal available to confirm on.\033[0m\n' >&2
+    printf '  Re-run with ASSUME_YES=1 to proceed without prompting:\n' >&2
+    printf '    ASSUME_YES=1 %s\n\n' "${ORIGINAL_INVOCATION}" >&2
+    exit 1
+  fi
+
+  printf '%s' "${prompt}"
+  read -r reply <&3 || reply=""
+  exec 3<&-
+  [[ "${reply}" =~ ^[Yy]$ ]]
+}
 
 [[ -z "${PROJECT}" || -z "${CMD}" ]] && usage
 
@@ -71,8 +103,7 @@ deploy_model() {
   bootstrap
 
   money "About to build an ~11GB GPU image and deploy an L4 (~\$0.70-1.00/hr when running)."
-  read -r -p "    Continue? [y/N] " ok
-  [[ "${ok}" =~ ^[Yy]$ ]] || { echo "Cancelled."; exit 0; }
+  confirm "    Continue? [y/N] " || { echo "Cancelled."; exit 0; }
 
   # The model is baked into the image on purpose. If the container pulled
   # 9.6GB at startup instead, every cold start would be 3-5 minutes.
@@ -210,7 +241,16 @@ do_down() {
 
 do_destroy() {
   warn "This deletes ${MODEL_SVC} and ${AGENT_SVC} from ${PROJECT}."
-  read -r -p "    Type the project id to confirm: " typed
+  local typed=""
+  if [[ "${ASSUME_YES:-}" == "1" ]]; then
+    typed="${PROJECT}"
+  elif { exec 3< /dev/tty; } 2>/dev/null; then
+    printf '    Type the project id to confirm: '
+    read -r typed <&3 || typed=""
+    exec 3<&-
+  else
+    die "no terminal to confirm on; re-run with ASSUME_YES=1 if you are sure"
+  fi
   [[ "${typed}" == "${PROJECT}" ]] || { echo "Mismatch. Nothing deleted."; exit 1; }
   gcloud run services delete "${MODEL_SVC}" --region "${REGION}" \
     --project "${PROJECT}" --quiet 2>/dev/null || true

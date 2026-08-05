@@ -4,12 +4,17 @@
 #
 #   curl -sSL https://raw.githubusercontent.com/adewumi0550/gemma/main/quickstart.sh | bash -s -- local
 #   curl -sSL https://raw.githubusercontent.com/adewumi0550/gemma/main/quickstart.sh | bash -s -- deploy PROJECT_ID
+#   curl -sSL https://raw.githubusercontent.com/adewumi0550/gemma/main/quickstart.sh | bash -s -- deploy PROJECT_ID europe-west4
 #
 # Commands
-#   local             run the agent on this machine against local Ollama
-#   deploy  PROJECT   deploy agent + Gemma model to Cloud Run
-#   agent   PROJECT   deploy ONLY the agent (needs LLM_BASE_URL set)
-#   check             verify prerequisites and exit
+#   local                    run the agent on this machine against local Ollama
+#   deploy  PROJECT [REGION] deploy agent + Gemma model to Cloud Run
+#   agent   PROJECT [REGION] deploy ONLY the agent (needs LLM_BASE_URL set)
+#   regions                  list Cloud Run regions that offer L4 GPUs
+#   check                    verify prerequisites and exit
+#
+# Region: pass it as the 3rd argument, or set REGION=. Omit both and you get an
+# interactive picker (or us-central1 when there's no terminal to prompt on).
 #
 # This clones the repo to ~/gemma-agent (override with INSTALL_DIR) because the
 # Cloud Run agent build ships the whole source tree, not just one script.
@@ -22,6 +27,23 @@ BRANCH="${BRANCH:-main}"
 
 CMD="${1:-}"
 PROJECT="${2:-}"
+REGION_ARG="${3:-}"
+
+# Cloud Run regions that offered NVIDIA L4 at time of writing. Google adds to
+# this list, so an unlisted region is a warning, not a refusal — check current
+# availability at cloud.google.com/run/docs/configuring/services/gpu
+GPU_REGIONS=(
+  us-central1        # Iowa
+  us-east4           # N. Virginia
+  us-west1           # Oregon
+  europe-west1       # Belgium
+  europe-west4       # Netherlands
+  europe-north1      # Finland
+  asia-southeast1    # Singapore
+  asia-south1        # Mumbai
+  asia-northeast1    # Tokyo
+  australia-southeast1  # Sydney
+)
 
 bold() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 ok()   { printf '\033[32m ok \033[0m %s\n' "$*"; }
@@ -39,6 +61,69 @@ USAGE
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+# ---------------------------------------------------------------- region
+
+list_regions() {
+  bold "Cloud Run regions with NVIDIA L4 GPUs"
+  local i=1
+  for r in "${GPU_REGIONS[@]}"; do
+    printf '  %2d) %s\n' "${i}" "${r}"
+    i=$((i + 1))
+  done
+  printf '\n  Availability changes — current list:\n'
+  printf '  https://cloud.google.com/run/docs/configuring/services/gpu\n'
+}
+
+is_gpu_region() {
+  local candidate="$1"
+  for r in "${GPU_REGIONS[@]}"; do
+    [[ "${r}" == "${candidate}" ]] && return 0
+  done
+  return 1
+}
+
+# Order of preference: 3rd argument, then $REGION, then ask, then default.
+resolve_region() {
+  local chosen="${REGION_ARG:-${REGION:-}}"
+
+  # Nothing supplied — offer a picker. When this script is piped into bash,
+  # stdin is the script text, so the prompt must read from the terminal
+  # directly. No terminal (CI, nohup) means fall back to the default.
+  if [[ -z "${chosen}" ]]; then
+    # Test by opening /dev/tty, not by stat-ing it — the path can be readable
+    # on a host where opening it still fails.
+    if { exec 3< /dev/tty; } 2>/dev/null; then
+      list_regions
+      printf '\n  Pick a number, type a region, or press Enter for us-central1: '
+      local reply=""
+      read -r reply <&3 || true
+      exec 3<&-
+      if [[ -z "${reply}" ]]; then
+        chosen="us-central1"
+      elif [[ "${reply}" =~ ^[0-9]+$ ]] \
+           && (( reply >= 1 && reply <= ${#GPU_REGIONS[@]} )); then
+        chosen="${GPU_REGIONS[$((reply - 1))]}"
+      else
+        chosen="${reply}"
+      fi
+    else
+      chosen="us-central1"
+      printf '\n  No terminal to prompt on — defaulting to us-central1.\n'
+      printf '  Pass one explicitly:  ... | bash -s -- %s PROJECT_ID REGION\n' "${CMD}"
+    fi
+  fi
+
+  if ! is_gpu_region "${chosen}"; then
+    printf '\n\033[33m!!  %s is not in the known GPU region list.\033[0m\n' "${chosen}"
+    printf '    The model deploy will fail if it has no L4 capacity.\n'
+    printf '    Run "regions" to see the list.\n'
+  fi
+
+  REGION="${chosen}"
+  export REGION
+  ok "region ${REGION}"
+}
 
 # ---------------------------------------------------------------- checks
 
@@ -138,6 +223,9 @@ run_deploy() {
     die "cannot access project '${PROJECT}' — check the id, and run: gcloud auth login"
   ok "project ${PROJECT} reachable"
 
+  # Exported so deploy.sh picks it up — it reads REGION from the environment.
+  resolve_region
+
   fetch_repo
   cd "${INSTALL_DIR}"
   chmod +x deploy.sh
@@ -162,10 +250,11 @@ run_deploy() {
 # ---------------------------------------------------------------- main
 
 case "${CMD}" in
-  local)  run_local ;;
-  deploy) run_deploy deploy ;;
-  agent)  run_deploy agent ;;
-  check)  check_prereqs "${PROJECT:-no}" ;;
+  local)   run_local ;;
+  deploy)  run_deploy deploy ;;
+  agent)   run_deploy agent ;;
+  regions) list_regions ;;
+  check)   check_prereqs "${PROJECT:-no}" ;;
   ""|-h|--help|help) usage ;;
-  *)      die "unknown command '${CMD}' — try: local, deploy, agent, check" ;;
+  *)       die "unknown command '${CMD}' — try: local, deploy, agent, regions, check" ;;
 esac
