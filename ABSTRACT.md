@@ -1,103 +1,127 @@
-# Talk abstract
+# Talk submission — Build with AI 2026: Gemma Day
+
+**Event:** GDG Ahlen · Saturday 22 August 2026 · 11:00–16:00 UTC · Virtual
+**Slot:** 13:00 UTC (~30 min, matching the other sessions)
+**Audience:** Founders, builders, developers — the event's stated theme is
+*"fast prototyping and validating business ideas"*
+
+---
+
+## ⚠️ Positioning: avoid the 11:30 collision
+
+**11:30 — "Enterprise Gemma deployment on Cloud Run" (Jay Thakkar)** already
+covers deploying Gemma to Cloud Run. Leading with that would make this the
+second deployment talk of the day.
+
+**So don't lead with deployment. Lead with what happens after it.** Deployment
+becomes one slide ("Jay covered this at 11:30 — here's the 60-second version"),
+and the talk is really about keys, quotas, and unit economics. That's the gap on
+the agenda, and it's the closest match to the event's business-validation theme.
+
+---
 
 ## Title
 
-**Metering Your Own AI: Gemma, MCP, and Token Quotas on Cloud Run**
+**From Open Model to Paid Product: Metering Gemma with MCP**
 
-*Alternate subtitle:* …for Agentic Apps
+### Alternatives
 
----
-
-## Short abstract (CFP / programme, ~120 words)
-
-Every "build an agent" talk ends at a working demo. This one starts there.
-
-We'll build an agentic AI on **Gemma 4** — an open model you host yourself, no
-frontier API, no keys — running on Cloud Run with an L4 GPU. It calls real
-tools, chains them unprompted, and shows its reasoning.
-
-Then the part nobody covers: **how do you let other people use it without going
-bankrupt?**
-
-We'll wire in an **MCP server** that issues API keys, enforces token quotas, and
-attributes every token to a user — administered entirely through MCP tools, so
-an agent can run the billing platform. Along the way: why agents burn 20× more
-input tokens than output, and what that means for your bill.
-
-Open model. Open protocol. Your infrastructure. Your economics.
+| Title | Angle |
+|---|---|
+| **Who's Using Your Tokens? Metering Gemma with MCP** | Question hook, MCP-forward |
+| **Your AI Has No Meter: API Keys and Quotas for Gemma** | Problem-first |
+| **Ship Gemma as a Product: Keys, Quotas, and Agentic Billing** | Founder-facing |
 
 ---
 
-## Long abstract (~280 words)
+## Abstract (~150 words — submission version)
 
-Agents are easy to demo and hard to operate. The gap shows up the moment
-someone else wants to use yours.
+You've got Gemma running. Now someone else wants to use it. What stops them
+burning your GPU budget in an afternoon?
 
-This session builds the whole path. We start with **Gemma 4** running under
-Ollama — first on a laptop, then on Cloud Run with an NVIDIA L4 — and write an
-agent loop from scratch, because the loop is the part everyone treats as magic.
-It's about sixty lines: a model, some tools, and a loop that lets the model
-choose. We'll watch it chain a weather lookup into a calculator without being
-told to, and watch it refuse to do arithmetic in its head.
+This session covers the part that comes after the demo: turning a self-hosted
+open model into a product you can actually offer to users. We'll add API keys,
+per-user token quotas, and full usage attribution to a Gemma 4 agent — every
+call metered, every token accounted for.
 
-Then we make it a service other people can call.
+The whole layer is built on **MCP**, so administration is itself agentic: ask an
+agent to issue a key with a two-million-token quota, or to show you who's
+overspending, and it does.
 
-Using the **Model Context Protocol**, we build a metering layer that issues API
-keys, enforces per-key token quotas, and records every call — tokens in, tokens
-out, tools invoked, latency. Crucially, the whole thing is exposed as **MCP
-tools**, so administration is itself agentic: ask an agent to issue a key with a
-two-million-token quota, or to tell you who's overspending, and it does.
+We'll also confront the number that surprises everyone: agents consume roughly
+**20× more input tokens than output**, because every reasoning step resends the
+entire conversation. If you're pricing an AI product, that ratio is your
+business model.
 
-Along the way we'll confront the numbers that make agents expensive. Every loop
-iteration resends the entire conversation *plus* every tool schema, so agents
-run roughly **20:1 input-to-output tokens**. Self-hosting converts that cost
-from dollars into latency and GPU-hours — a trade worth understanding before you
-commit to either.
+Open model. Open protocol. Your margins.
 
-You'll leave with a working repo, a deployment script, and an honest account of
-what it costs — including what happens when you forget to scale the GPU down.
+---
 
-**Level:** Intermediate · **Format:** 40 min talk + live demo
+## Detailed description (for the organisers)
+
+Gemma makes self-hosting viable. But "it runs" and "other people can use it" are
+very different problems, and the second one is where most prototypes stall.
+
+We start where the earlier Cloud Run session leaves off: a working Gemma 4 agent
+on an L4 GPU, calling real tools and chaining them unprompted. From there we
+build the operating layer.
+
+Using the **Model Context Protocol**, we add a metering service that issues API
+keys (hashed, shown once, never recoverable), enforces token quotas, and records
+every call — tokens in, tokens out, tools invoked, latency, per user. Because
+it's MCP, the same tools work from a script, a dashboard, or an agent, which
+makes platform administration conversational.
+
+Then the economics. Agents are input-heavy in a way that's easy to miss: each
+loop iteration resends the whole conversation plus every tool schema. Measured
+across real runs, that's about 20:1 input-to-output. On a metered API that's
+your dominant cost. Self-hosted, it converts into latency and GPU-hours instead
+— a genuine trade, and one worth understanding before you price anything.
+
+Attendees leave with an open-source repo, a deploy script, and honest numbers,
+including what an idle GPU costs when you forget to scale it down.
 
 ---
 
 ## Takeaways
 
-1. An agent is a model, tools, and a loop — build it once by hand and it stops being mysterious.
-2. Open models are production-viable: Gemma 4 does reliable tool calling on a single L4.
-3. MCP separates *what your agent can do* from *who's allowed to do it*.
-4. Agents are input-heavy. Measure tokens before you price anything.
-5. Portability is one environment variable — if you design for it.
+1. Open models are production-viable — Gemma 4 does reliable tool calling on one L4.
+2. MCP separates *what your agent does* from *who's allowed to do it*.
+3. Agents are input-heavy. Measure the ratio before you price anything.
+4. API keys must be hashed and shown once — a leaked database shouldn't leak access.
+5. The cheapest infrastructure mistake is forgetting to scale the GPU down.
 
 ---
 
-## What's demoed live
+## Live demo
 
 | | |
 |---|---|
-| Gemma 4 on Cloud Run | L4 GPU, model baked into the image |
-| Tool chaining | weather → calculator, unprompted |
-| MCP key issuing | 2,000,000-token default quota |
-| Quota enforcement | 429 when exhausted |
-| Usage attribution | per-key tokens, tools, latency |
+| Gemma 4 tool chaining | weather → calculator, unprompted |
+| Issue a key over MCP | 2,000,000-token default quota |
+| Quota enforcement | 429 once exhausted |
+| Usage attribution | tokens, tools and latency per key |
+| The 20:1 reveal | `/metrics` on real traffic |
+
+**Virtual event, so:** pre-warm the GPU (`./deploy.sh PROJECT warm`) about 20
+minutes before, rehearse over screen share, and keep the local Ollama fallback
+running in a second window. Scale down afterwards.
 
 ---
 
-## Notes on wording
+## Wording notes
 
-**"Tokenomics"** — avoid it in the title. To a developer audience it means
-cryptocurrency token design, and it will attract the wrong people while
-repelling the right ones. It works as a spoken aside: *"call it tokenomics if
+**"Tokenomics"** — keep it out of the title. To this audience it reads as
+cryptocurrency token design. It works as a spoken aside: *"call it tokenomics if
 you like — it's really just knowing who spent what."*
 
 **"AG-UI"** — the current UI is a plain HTML page calling `/chat` and `/status`
-over `fetch`. It is **not** the AG-UI protocol: no agent-event stream, no
-`RunAgentInput`, no CopilotKit integration. Say "a simple agent UI" unless you
-implement AG-UI properly — an audience that knows the protocol will ask which
-events you emit.
+over `fetch`. It is **not** the AG-UI protocol: no agent event stream, no
+`RunAgentInput`, no CopilotKit. Say "a simple agent UI" unless it's implemented
+properly — this audience will ask which events you emit.
 
-To claim it honestly, the agent would need to stream AG-UI events
+To claim it honestly the agent would stream AG-UI events
 (`TEXT_MESSAGE_CONTENT`, `TOOL_CALL_START`, `TOOL_CALL_END`, `RUN_FINISHED`)
-over SSE, and the UI would consume them instead of awaiting one JSON response.
-That's a real addition, not a relabel — but it would make the tool-calling
-trace stream live on screen, which demos well.
+over SSE, with the UI consuming them rather than awaiting one JSON response.
+Real work, but it would make the tool-calling trace stream live on screen —
+which demos far better than a four-second pause followed by a wall of text.
