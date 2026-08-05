@@ -1,0 +1,80 @@
+# Continuous deployment: push to GitHub -> Cloud Run redeploys the agent.
+#
+# This builds ONLY the agent service. The model image (11GB, GPU) is
+# deliberately excluded — you do not want a 25-minute GPU image rebuild on
+# every README typo. Deploy that once by hand:  ./deploy.sh PROJECT model
+#
+# One-time setup:
+#   gcloud builds triggers create github \
+#     --name=gemma-agent-deploy \
+#     --repo-name=gemma --repo-owner=adewumi0550 \
+#     --branch-pattern="^main$" \
+#     --build-config=cloudbuild.yaml \
+#     --region=us-central1
+#
+# Then grant Cloud Build permission to deploy:
+#   PROJECT_NUMBER=$(gcloud projects describe PROJECT --format='value(projectNumber)')
+#   gcloud projects add-iam-policy-binding PROJECT \
+#     --member=serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com \
+#     --role=roles/run.admin
+#   gcloud projects add-iam-policy-binding PROJECT \
+#     --member=serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com \
+#     --role=roles/iam.serviceAccountUser
+
+substitutions:
+  _REGION: us-central1
+  _SERVICE: gemma-agent
+  _REPO: gemma
+  # Set this in the trigger to your model service URL, e.g.
+  #   https://gemma-model-xxxx.us-central1.run.app/v1
+  _LLM_BASE_URL: ""
+  _MODEL: gemma4
+
+steps:
+  # 1. Build the agent image, tagged with the commit SHA so you can roll back.
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/agent:$SHORT_SHA
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/agent:latest
+      - -f
+      - Dockerfile.agent
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/agent']
+
+  # 2. Deploy. The model URL is passed through from the trigger substitution,
+  #    so the image itself stays environment-agnostic.
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/agent:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --cpu=1
+      - --memory=512Mi
+      - --max-instances=5
+      - --min-instances=0
+      - --concurrency=20
+      - --timeout=600
+      - --set-env-vars=LLM_BASE_URL=${_LLM_BASE_URL},MODEL=${_MODEL},MAX_STEPS=6
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/agent:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/agent:latest
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1200s

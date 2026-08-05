@@ -1,0 +1,24 @@
+# Agent service — small and CPU-only, so it rebuilds in seconds.
+# The model lives in its own image; see deploy.sh.
+
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Requirements first so the layer caches across code changes.
+# Only the agent's deps — the `mcp` package is for running the MCP server,
+# which the agent never imports (middleware reaches metering, not server.py).
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py ./
+COPY tokenic_mcp/ ./tokenic_mcp/
+
+ENV PORT=8080
+EXPOSE 8080
+
+CMD exec uvicorn app:app --host 0.0.0.0 --port ${PORT}

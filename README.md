@@ -1,10 +1,75 @@
+<div align="center">
+
 # Build an Agentic AI with Gemma 4
 
-A complete AI agent in **one file**, running on an open model you host yourself.
-No API keys. No frontier model. Runs on your laptop, deploys to Cloud Run
-unchanged.
+**A complete AI agent in one file — on an open model you host yourself.**
 
-Workshop material — clone it, run it, break it.
+No API keys. No frontier model. Runs on your laptop, deploys to Cloud Run unchanged.
+
+[![Model](https://img.shields.io/badge/model-Gemma%204%20(8B)-1D9E75)](https://ai.google.dev/gemma)
+[![Runtime](https://img.shields.io/badge/runtime-Ollama-534AB7)](https://ollama.com)
+[![Deploy](https://img.shields.io/badge/deploy-Cloud%20Run-378ADD)](https://cloud.google.com/run)
+[![License](https://img.shields.io/badge/license-Apache%202.0-5F5E5A)](LICENSE)
+
+</div>
+
+---
+
+## What you'll build
+
+An agent that answers *"What's the temperature in Lagos, and what is that in Fahrenheit?"* by calling a weather API, then a calculator — chaining two tools it was never told to chain.
+
+Then you'll put it in production with per-user API keys and token metering.
+
+![Deployment topology](diagrams/01-deployment-topology.svg)
+
+Two Cloud Run services. The agent is ~200 MB and redeploys in two minutes; the model is ~11 GB and needs a GPU. Splitting them means a prompt tweak doesn't re-push 11 GB.
+
+---
+
+## Contents
+
+| | |
+|---|---|
+| [Quick start](#quick-start) | One command, laptop or cloud |
+| [What is an agent?](#what-is-an-agent-actually) | The three-part idea, no hype |
+| [Run it locally](#run-it-locally) | Step by step |
+| [Usage metrics](#usage-metrics) | Token accounting per request |
+| [API keys & metering](#api-keys--metering) | `tokenic_mcp` — 9 MCP tools |
+| [Deploy to Cloud Run](#deploy-to-cloud-run) | Including what it costs |
+| [Add your own tool](#add-your-own-tool) | Three steps |
+| [ADK and MCP](#how-this-maps-to-adk-and-mcp) | Where this sits |
+| [Running the workshop](#running-the-workshop) | If you're presenting this |
+| [Troubleshooting](#troubleshooting) | Real failures, real fixes |
+
+---
+
+## Quick start
+
+Run it on your machine:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/adewumi0550/gemma/main/quickstart.sh | bash -s -- local
+```
+
+Deploy to Cloud Run:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/adewumi0550/gemma/main/quickstart.sh | bash -s -- deploy YOUR_PROJECT_ID
+```
+
+Check prerequisites without installing anything:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/adewumi0550/gemma/main/quickstart.sh | bash -s -- check
+```
+
+> **Piping a URL into `bash` runs code you haven't read.** Fine here — it's a
+> short script you can read first, and you should build the habit:
+>
+> ```bash
+> curl -sSL https://raw.githubusercontent.com/adewumi0550/gemma/main/quickstart.sh -o quickstart.sh && less quickstart.sh && bash quickstart.sh local
+> ```
 
 ---
 
@@ -12,22 +77,19 @@ Workshop material — clone it, run it, break it.
 
 Strip away the hype and an agent is three things:
 
-1. **A model** that can decide what to do — here, Gemma 4.
-2. **Tools** it's allowed to call — here, three Python functions.
+1. **A model** that decides what to do — here, Gemma 4.
+2. **Tools** it may call — here, three Python functions.
 3. **A loop** that runs tools and feeds results back until there's an answer.
 
-That's the whole idea. [`app.py`](app.py) is those three things, labelled, in
-about 200 lines.
+That's it. [`app.py`](app.py) is those three things, labelled, in ~260 lines.
 
 ### Why a model needs tools
 
-Ask Gemma `What is 4728 × 391?` and it will produce a confident, wrong number.
-Language models predict text; they don't calculate. Ask it today's date and it
-guesses from training data.
+Ask Gemma `What is 4728 × 391?` and you'll get a confident, wrong number. Language models predict text; they don't calculate. Ask today's date and it guesses from training data.
 
-Tools fix this. The model doesn't answer — it decides **which function to call**,
-you run that function, and it uses the real result. The intelligence is choosing
-the tool. The accuracy comes from the tool.
+Tools fix this. The model doesn't answer — it decides **which function to call**, you run it, and it uses the real result.
+
+> **The intelligence is choosing the tool. The accuracy comes from the tool.**
 
 ### The loop
 
@@ -46,10 +108,7 @@ user question
 final answer
 ```
 
-Each pass, Gemma sees everything so far and either asks for another tool or
-writes the answer. Chaining is where it gets interesting: *"temperature in Lagos
-in Fahrenheit"* needs `get_weather` **then** `calculator`, and nobody told it
-that sequence.
+Each pass, Gemma sees everything so far and either asks for another tool or writes the answer. Chaining is where it gets interesting: *"temperature in Lagos in Fahrenheit"* needs `get_weather` **then** `calculator`, and nobody told it that sequence.
 
 ---
 
@@ -63,8 +122,7 @@ that sequence.
 ollama pull gemma4
 ```
 
-**3. Warm it up.** First load pulls 9.6 GB from disk into memory and can take a
-minute or two. Do this before you demo, not during:
+**3. Warm it.** First load pulls 9.6 GB from disk into memory and can take a minute or two. Do this *before* you demo:
 
 ```bash
 ollama run gemma4 "hi"
@@ -80,13 +138,13 @@ pip install -r requirements.txt
 python app.py
 ```
 
-**5. Ask it something that needs tools:**
+**5. Ask something that needs tools:**
 
 ```bash
 curl -X POST localhost:8080/chat -H 'Content-Type: application/json' -d '{"message":"What is the temperature in Lagos right now, and what is that in Fahrenheit?"}'
 ```
 
-You'll see the tool calls in your terminal as they happen:
+Tool calls print as they happen:
 
 ```
   step 1: get_weather({'city': 'Lagos'}) -> {'temperature_celsius': 31.2, ...}
@@ -94,6 +152,18 @@ You'll see the tool calls in your terminal as they happen:
 ```
 
 Two tools, chained, unprompted. That's the agent working.
+
+### Try these
+
+| Prompt | What it shows |
+|---|---|
+| `What is 4728 * 391?` | Defers to the calculator instead of guessing |
+| `What's the weather in Nairobi?` | Single tool call |
+| **`Temperature in Lagos in Fahrenheit?`** | **Chains two tools — the good one** |
+| `What year is it?` | Grounding; it'd otherwise guess from training data |
+| `Who was Ada Lovelace?` | No tool needed — it just answers |
+
+That last one matters as much as the others: a good agent knows when *not* to use a tool.
 
 ---
 
@@ -116,7 +186,7 @@ Every response carries its own token accounting:
 }
 ```
 
-And `GET /metrics` gives you process-wide totals:
+`GET /metrics` gives process-wide totals:
 
 ```bash
 curl localhost:8080/metrics
@@ -130,42 +200,84 @@ curl localhost:8080/metrics
   "total_tokens": 22458,
   "llm_calls": 34,
   "tool_calls": 19,
-  "errors": 0,
   "by_tool": {"get_weather": 8, "calculator": 9, "current_time": 2},
   "avg_tokens_per_request": 1871.5,
-  "avg_seconds_per_request": 4.32,
-  "avg_tool_calls_per_request": 1.58
+  "avg_seconds_per_request": 4.32
 }
 ```
 
-**The number worth pointing at in a talk:** `prompt` tokens dwarf `completion`
-tokens — roughly 20:1 above. Every loop pass resends the whole conversation
-*plus* every tool schema. Agents are input-heavy, and that's what drives cost on
-a metered API. Here you're self-hosting, so it costs you latency instead.
+> **The number worth pointing at:** prompt tokens dwarf completion tokens — about **20:1** above. Every loop pass resends the whole conversation *plus* every tool schema. Agents are input-heavy, and that's what drives cost on a metered API. Self-hosting, it costs you latency instead.
 
-`llm_calls` is the other one. Three model calls for one question — that's the
-loop, made visible.
+`llm_calls: 34` across 12 requests is the other one — roughly 3 model calls per question. That's the loop, made visible.
+
+---
+
+## API keys & metering
+
+[`tokenic_mcp/`](tokenic_mcp/) turns the agent into something you can hand to other people: per-user API keys, token quotas, and usage tracking — all administered through **MCP tools**.
+
+![Metered request flow](diagrams/02-metered-request-flow.svg)
+
+Note the split at the agent: one path goes to the GPU, the other writes token counts to storage. They're independent — **metering fails open**, so if the database is down the user still gets their answer; you just lose the billing record.
+
+`tokenic_mcp` sits *under* the store, not in the request path. It never touches a user request.
+
+### The 9 MCP tools
+
+| Keys | Usage |
+|---|---|
+| `issue_api_key` | `get_usage` |
+| `revoke_api_key` | `get_total_usage` |
+| `list_api_keys` | `recent_calls` |
+| `describe_api_key` | `top_consumers` |
+| | `check_quota` |
+
+### Turn it on
+
+```bash
+TOKENIC_REQUIRE_KEY=true TOKENIC_BACKEND=firestore python app.py
+```
+
+Calls then need a key, and responses gain a `billed_to` block:
+
+```json
+{
+  "answer": "It's 25.6°C in Lagos…",
+  "usage": {"total": 1943, "tool_calls": 2},
+  "billed_to": {"key_id": "key_a1b2…", "owner": "ada", "tokens_remaining": 3057}
+}
+```
+
+**401** for a bad or revoked key, **429** when the quota is gone.
+
+### Storage
+
+| `TOKENIC_BACKEND` | Use when |
+|---|---|
+| `memory` *(default)* | Workshops, local dev. Zero setup, lost on restart |
+| `firestore` | You want serverless — matches Cloud Run, no pool to manage |
+| `postgres` | You'll bill from this data — SQL aggregation, monthly rollup view |
+
+Keys are stored as **SHA-256 only** and shown exactly once. A database dump leaks nothing usable. Full detail in [`tokenic_mcp/README.md`](tokenic_mcp/README.md).
 
 ---
 
 ## Deploy to Cloud Run
 
-The agent never imports Ollama. It only knows an OpenAI-compatible URL, so
-moving to the cloud is **one environment variable**:
+The agent never imports Ollama. It only knows an OpenAI-compatible URL, so moving to the cloud is **one environment variable**:
 
 | Where | `LLM_BASE_URL` |
 |---|---|
 | Laptop | `http://localhost:11434/v1` |
-| Cloud Run | `https://your-ollama-service.run.app/v1` |
+| Cloud Run | `https://your-model-service.run.app/v1` |
 
-**If you already have Ollama on Cloud Run**, deploy just the agent and point at it:
+**Already have Ollama on Cloud Run?** Deploy just the agent:
 
 ```bash
 LLM_BASE_URL=https://YOUR-OLLAMA.run.app/v1 ./deploy.sh YOUR_PROJECT_ID agent
 ```
 
-**If you don't**, `deploy.sh` will build one for you — Ollama with Gemma 4 baked
-into the image, on an L4 GPU:
+**Don't?** `deploy.sh` builds one — Ollama with Gemma 4 baked into the image, on an L4 GPU:
 
 ```bash
 ./deploy.sh YOUR_PROJECT_ID all
@@ -175,9 +287,9 @@ into the image, on an L4 GPU:
 ./deploy.sh YOUR_PROJECT_ID test
 ```
 
-### Cost
+### What it costs
 
-The agent service is tiny and effectively free. The GPU is not.
+The agent service is effectively free. The GPU is not.
 
 | | |
 |---|---|
@@ -187,8 +299,7 @@ The agent service is tiny and effectively free. The GPU is not.
 | 1-hour workshop, warmed | ~$1 |
 | **Left warm and forgotten for a week** | **~$150** |
 
-Both services scale to zero by default, so you only pay while a request is
-running — at the cost of a ~60s cold start.
+Both services scale to zero by default — you pay only while a request runs, at the cost of a ~60s cold start.
 
 Before you present:
 
@@ -196,32 +307,25 @@ Before you present:
 ./deploy.sh YOUR_PROJECT_ID warm
 ```
 
-**After you present** — this is the one that matters:
+**After you present** — the one that matters:
 
 ```bash
 ./deploy.sh YOUR_PROJECT_ID down
 ```
 
-Or remove the services entirely:
+Or remove everything:
 
 ```bash
 ./deploy.sh YOUR_PROJECT_ID destroy
 ```
 
----
+### Push-to-deploy
 
-## Try these
+[`cloudbuild.yaml`](cloudbuild.yaml) redeploys the **agent** on every push to `main`. The model image is deliberately excluded — you don't want a 25-minute GPU rebuild on a README typo.
 
-| Prompt | What it shows |
-|---|---|
-| `What is 4728 * 391?` | Defers to the calculator instead of guessing |
-| `What's the weather in Nairobi?` | Single tool call |
-| `Temperature in Lagos in Fahrenheit?` | **Chains two tools** — the good one |
-| `What year is it?` | Grounding — it'd otherwise guess from training data |
-| `Who was Ada Lovelace?` | No tool needed; it just answers |
-
-That last one matters as much as the others: a good agent knows when *not* to
-use a tool.
+```bash
+gcloud builds triggers create github --name=gemma-agent-deploy --repo-name=gemma --repo-owner=adewumi0550 --branch-pattern="^main$" --build-config=cloudbuild.yaml --region=us-central1
+```
 
 ---
 
@@ -229,8 +333,7 @@ use a tool.
 
 Three steps, all in [`app.py`](app.py):
 
-**1. Write a function.** Return a dict; return `{"error": ...}` instead of
-raising, so the model can read the failure and recover:
+**1. Write a function.** Return a dict; return `{"error": ...}` instead of raising, so the model can read the failure and recover:
 
 ```python
 def convert_currency(amount: float, from_currency: str, to_currency: str) -> dict:
@@ -244,16 +347,15 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> dic
 TOOLS = {..., "convert_currency": convert_currency}
 ```
 
-**3. Describe it in `SCHEMAS`.** This is the part people underestimate — the
-description is the *only* thing Gemma uses to decide whether your tool is
-relevant. A vague description is a bug, not a docs problem.
+**3. Describe it in `SCHEMAS`.** The part people underestimate — the description is the *only* thing Gemma uses to decide whether your tool is relevant.
+
+> **A vague tool description is a bug, not a docs problem.**
 
 ---
 
 ## How this maps to ADK and MCP
 
-Two things you'll hear about, often presented as competing. They aren't — they
-sit at different layers:
+Two things you'll hear about, often presented as competing. They aren't — they sit at different layers:
 
 | | **This repo** | **ADK** | **MCP** |
 |---|---|---|---|
@@ -261,9 +363,7 @@ sit at different layers:
 | Gives you | Understanding | Sessions, streaming, eval, deploy | Tools any agent can use |
 | Analogy | Writing a socket by hand | A web framework | HTTP |
 
-Start here so the loop isn't magic. Then **ADK** replaces the loop with a real
-runtime, and **MCP** moves your tools behind a protocol so other agents can
-call them too. ADK consumes MCP servers via `MCPToolset` — they compose:
+Start here so the loop isn't magic. Then **ADK** replaces the loop with a real runtime, and **MCP** moves your tools behind a protocol so other agents can call them. ADK consumes MCP servers via `MCPToolset` — they compose:
 
 ```
 Gemma  ←  ADK (runtime)  ←  MCPToolset  ←  MCP server (tools)
@@ -271,19 +371,79 @@ Gemma  ←  ADK (runtime)  ←  MCPToolset  ←  MCP server (tools)
 
 Neither replaces the other, and neither replaces knowing what's in `app.py`.
 
+### The five layers
+
+Worth being explicit about early — if two of these get conflated, the architecture stops making sense:
+
+| Layer | What it is |
+|---|---|
+| **Gemma** | The model — trained weights |
+| **Ollama** | The runtime that loads and serves them |
+| **ADK** | The agent framework — loop, sessions |
+| **MCP** | The tool protocol |
+| **Cloud Run** | Where the containers run |
+
+---
+
+## Running the workshop
+
+If you're presenting this:
+
+**The week before**
+
+- [ ] Check Cloud Run **L4 GPU quota** in your region — approval isn't instant
+- [ ] Run the model build once: `./deploy.sh PROJECT model` (~30–45 min)
+- [ ] Send participants the `check` command so they arrive with Ollama installed
+
+**The day of**
+
+- [ ] `./deploy.sh PROJECT warm` — about 20 minutes ahead
+- [ ] `ollama run gemma4 "hi"` on your laptop, so no 160s cold load on stage
+- [ ] Have the local fallback ready in case conference wifi dies
+
+**Afterwards**
+
+- [ ] `./deploy.sh PROJECT down` — **this is the one people forget**
+
+### Demo arc
+
+1. **Frame it** — an agent is a model, tools, and a loop. Nothing more mystical.
+2. **Break it first** — ask `What is 4728 * 391?` with tools disabled. Wrong answer. *This is why tools exist.*
+3. **Turn tools on** — same question, right answer, visible tool call.
+4. **Chain them** — the Lagos-to-Fahrenheit prompt. Two tools, unprompted.
+5. **Show the cost** — `/metrics`, and the 20:1 input ratio.
+6. **Deploy** — same prompt against Cloud Run. One env var changed.
+7. **Close** — swap the model, swap the tools, neither rewrite touches the other.
+
 ---
 
 ## Files
 
 ```
-app.py             the entire agent — tools, metrics, loop, HTTP
-requirements.txt   three dependencies
-PRD.md             product spec, if you want the full design rationale
+app.py                  the entire agent — tools, metrics, loop, HTTP
+quickstart.sh           one-command bootstrap (local or deploy)
+deploy.sh               Cloud Run: model | agent | test | warm | down | destroy
+cloudbuild.yaml         push-to-deploy for the agent
+Dockerfile.agent        agent container
+requirements.txt        three dependencies
+
+tokenic_mcp/            API keys + token metering, over MCP
+├── server.py           the MCP server (9 tools)
+├── metering.py         key lifecycle + usage logic
+├── keys.py             generation, hashing, constant-time verify
+├── middleware.py       FastAPI auth dependency
+├── schema.sql          Postgres DDL + monthly rollup
+└── storage/            memory · firestore · postgres
+
+diagrams/               architecture diagrams (SVG + 3x PNG)
+PRD.md                  full design rationale
 ```
 
 ---
 
 ## Troubleshooting
+
+### Local
 
 | Problem | Fix |
 |---|---|
@@ -291,9 +451,21 @@ PRD.md             product spec, if you want the full design rationale
 | First request takes ~2 min | Cold model load. Warm with `ollama run gemma4 "hi"` |
 | It invents numbers instead of calling `calculator` | Sharpen the tool description; keep the "ALWAYS use the calculator" line in the system prompt |
 | Loops or repeats a tool | Lower `MAX_STEPS`, or make tool descriptions more distinct |
-| `model not found` | `ollama list` to check the exact tag, then set `MODEL=` to match |
+| `model not found` | `ollama list` for the exact tag, then set `MODEL=` to match |
+
+### Cloud Run
+
+| Problem | Fix |
+|---|---|
+| `FAILED_PRECONDITION: cannot run builds of this machine type` | Cloud Build machine quota. The default builder is used now; to try a bigger one: `BUILD_MACHINE=E2_HIGHCPU_8 ./deploy.sh …` |
+| `Quota exceeded: NVIDIA_L4_GPUS` | Request GPU quota in the console, or point `LLM_BASE_URL` at a managed endpoint |
+| Build times out | Already 3600s. An 11 GB image on the default builder takes 30–45 min |
+| Agent returns 502 | Model still loading — wait ~60s, check `/healthz` |
+| `/healthz` says `degraded` | Agent can't reach the model. Check `LLM_BASE_URL` and invoker IAM |
+| Container fails to start | Ollama must bind `0.0.0.0:8080` — Cloud Run routes nowhere else |
 
 ---
 
-Apache 2.0. Gemma is licensed under the
-[Gemma Terms of Use](https://ai.google.dev/gemma/terms).
+## License
+
+Apache 2.0. Gemma is separately licensed under the [Gemma Terms of Use](https://ai.google.dev/gemma/terms).

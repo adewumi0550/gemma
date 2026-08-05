@@ -97,6 +97,14 @@ ENTRYPOINT []
 CMD ["/bin/ollama", "serve"]
 DOCKER
 
+  # Machine type is left at the default pool unless BUILD_MACHINE is set.
+  # Larger types (E2_HIGHCPU_32) need a quota most projects don't have, and
+  # asking for one you lack fails the build outright rather than degrading.
+  local machine_line=""
+  if [[ -n "${BUILD_MACHINE:-}" ]]; then
+    machine_line="  machineType: ${BUILD_MACHINE}"
+  fi
+
   cat > "${tmp}/cloudbuild.yaml" <<YAML
 steps:
   - name: gcr.io/cloud-builders/docker
@@ -104,12 +112,12 @@ steps:
     timeout: 3000s
 images: ['${IMG}/model:latest']
 options:
-  machineType: E2_HIGHCPU_32
+${machine_line}
   diskSizeGb: 200
 timeout: 3600s
 YAML
 
-  bold "Building — 20-30 minutes. Safe to leave running."
+  bold "Building — 30-45 minutes on the default builder. Safe to leave running."
   gcloud builds submit "${tmp}" --config "${tmp}/cloudbuild.yaml" \
     --project "${PROJECT}" --region "${REGION}"
   rm -rf "${tmp}"
