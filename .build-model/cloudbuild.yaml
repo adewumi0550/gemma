@@ -1,9 +1,0 @@
-steps:
-  - name: gcr.io/cloud-builders/docker
-    args: ['build','-t','us-central1-docker.pkg.dev/steadfast-helix-429321-b2/gemma/model:latest','.']
-    timeout: 3000s
-images: ['us-central1-docker.pkg.dev/steadfast-helix-429321-b2/gemma/model:latest']
-options:
-
-  diskSizeGb: 200
-timeout: 3600s

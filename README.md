@@ -52,7 +52,7 @@ Run it on your machine:
 curl -sSL https://raw.githubusercontent.com/adewumi0550/gemma/main/quickstart.sh | bash -s -- local
 ```
 
-Deploy to Cloud Run:
+Deploy to Cloud Run — replace `YOUR_PROJECT_ID` with your own Google Cloud project ID ([how to find it](#first-your-project-id)):
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/adewumi0550/gemma/main/quickstart.sh | bash -s -- deploy YOUR_PROJECT_ID
@@ -264,6 +264,56 @@ Keys are stored as **SHA-256 only** and shown exactly once. A database dump leak
 
 ## Deploy to Cloud Run
 
+### First: your project ID
+
+Every deploy command needs **your own Google Cloud project ID** — not a project name, not a number. It looks like `my-project-4f2a1` or `steadfast-helix-429321-b2`.
+
+**1. Sign in:**
+
+```bash
+gcloud auth login
+```
+
+**2. Find your project ID** (the `PROJECT_ID` column):
+
+```bash
+gcloud projects list
+```
+
+No projects? Create one — the ID must be globally unique, so add a suffix:
+
+```bash
+gcloud projects create my-gemma-agent-4f2a1 --name="Gemma Agent"
+```
+
+**3. Set it as your default** so you don't retype it:
+
+```bash
+gcloud config set project YOUR_PROJECT_ID
+```
+
+**4. Enable billing.** Cloud Run and GPUs need an active billing account — a free-trial account works. Check with:
+
+```bash
+gcloud beta billing projects describe YOUR_PROJECT_ID
+```
+
+If that prints `billingEnabled: false`, link an account in the [console](https://console.cloud.google.com/billing) first. Every deploy will fail until you do.
+
+Then substitute your ID wherever this README says `YOUR_PROJECT_ID`:
+
+```bash
+./deploy.sh my-gemma-agent-4f2a1 all
+```
+
+> The script takes the project ID as its **first argument** — it doesn't read
+> your gcloud default. That's deliberate: with a room full of people deploying
+> at once, an explicit ID beats a silent default that deploys to the wrong place.
+
+---
+
+### Moving to the cloud
+
 The agent never imports Ollama. It only knows an OpenAI-compatible URL, so moving to the cloud is **one environment variable**:
 
 | Where | `LLM_BASE_URL` |
@@ -394,6 +444,7 @@ If you're presenting this:
 - [ ] Check Cloud Run **L4 GPU quota** in your region — approval isn't instant
 - [ ] Run the model build once: `./deploy.sh PROJECT model` (~30–45 min)
 - [ ] Send participants the `check` command so they arrive with Ollama installed
+- [ ] Tell participants to bring a **Google Cloud project with billing enabled** — creating one and linking billing takes longer than you'd think, and it blocks every deploy command
 
 **The day of**
 

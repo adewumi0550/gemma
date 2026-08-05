@@ -123,7 +123,14 @@ run_local() {
 
 run_deploy() {
   local what="$1"
-  [[ -n "${PROJECT}" ]] || die "a project id is required:  ... | bash -s -- ${what} YOUR_PROJECT_ID"
+  if [[ -z "${PROJECT}" ]]; then
+    printf '\n\033[31mError: a Google Cloud project ID is required.\033[0m\n\n' >&2
+    printf '  Find yours (the PROJECT_ID column):\n    gcloud projects list\n\n' >&2
+    printf '  Or create one (the id must be globally unique):\n' >&2
+    printf '    gcloud projects create my-gemma-agent-4f2a1\n\n' >&2
+    printf '  Then re-run:\n    ... | bash -s -- %s YOUR_PROJECT_ID\n\n' "${what}" >&2
+    exit 1
+  fi
 
   check_prereqs yes
 
